@@ -3,12 +3,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from PIL import Image
 import numpy as np
-try:
-    from reportlab.graphics import renderPM
-    from svglib.svglib import svg2rlg
-except Exception:
-    renderPM = None
-    svg2rlg = None
+
+# try:
+#     from reportlab.graphics import renderPM
+#     from svglib.svglib import svg2rlg
+# except Exception:
+#     renderPM = None
+#     svg2rlg = None
 
 @dataclass
 class ImageDocument:
@@ -22,11 +23,25 @@ class ImageService:
 
     def load_image(self, path: str | Path) -> Image.Image:
         path = Path(path)
+        
         if path.suffix.lower() == ".svg":
-            if not svg2rlg or not renderPM:
-                raise RuntimeError("Para abrir SVG, instale svglib e reportlab.")
-            drawing = svg2rlg(str(path))
-            return renderPM.drawToPIL(drawing).convert("RGBA")
+            import fitz  # PyMuPDF
+            import io
+            
+            try:
+                # O PyMuPDF abre o documento SVG
+                doc = fitz.open(str(path))
+                
+                # Extrai a primeira "página" (o desenho) em formato de mapa de pixels com fundo transparente (Alpha)
+                pix = doc[0].get_pixmap(alpha=True)
+                
+                # Converte os pixels brutos para o formato do Pillow
+                return Image.open(io.BytesIO(pix.tobytes())).convert("RGBA")
+            
+            except Exception as e:
+                raise RuntimeError(f"Falha ao carregar o SVG: {e}")
+                
+        # Para todos os outros formatos (PNG, JPG, BMP, WEBP, etc)
         return Image.open(path).convert("RGBA")
 
     def resize_for_preview(self, image: Image.Image, max_size: int = 430) -> Image.Image:

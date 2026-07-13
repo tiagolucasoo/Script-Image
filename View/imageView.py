@@ -772,21 +772,40 @@ class ScriptImageApp(ctk.CTk):
     def set_color_options(self, colors: list[str]):
         colors = colors or ["#000000"]
         if hasattr(self, "old_color"):
-            self.old_color.configure(values=colors)
-            self.old_color.set(colors[0])
-            self.old_swatch.configure(fg_color=colors[0])
+            try:
+                self.old_color.configure(values=colors)
+                self.old_color.set(colors[0])
+                self.old_swatch.configure(fg_color=colors[0])
+            except Exception:
+                pass
 
     def show_preview(self, original: Image.Image | None, result: Image.Image | None):
         if original:
+            # Guarda a imagem velha numa variável temporária para ela não ser apagada ainda
+            if hasattr(self, "preview_original"):
+                self._segura_original = self.preview_original
+                
             preview = self.controller.service.resize_for_preview(original, 560)
             self.preview_original = ctk.CTkImage(light_image=preview, dark_image=preview, size=preview.size)
             self.original_box.configure(image=self.preview_original, text="")
+            self.original_box.image = self.preview_original
+            
         if result:
+            # Guarda o resultado velho numa variável temporária para ele não ser apagado ainda
+            if hasattr(self, "preview_result"):
+                self._segura_resultado = self.preview_result
+                
             preview = self.controller.service.resize_for_preview(result, 560)
             self.preview_result = ctk.CTkImage(light_image=preview, dark_image=preview, size=preview.size)
             self.result_box.configure(image=self.preview_result, text="")
+            self.result_box.image = self.preview_result
+            
         else:
+            if hasattr(self, "preview_result"):
+                self._segura_resultado = self.preview_result
+                
             self.result_box.configure(image=None, text="Aguardando resultado")
+            self.result_box.image = None
 
     def set_status(self, text: str):
         self.status_label.configure(text=text)

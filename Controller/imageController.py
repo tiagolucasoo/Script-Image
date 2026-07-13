@@ -75,9 +75,15 @@ class ImageController:
             return
         try:
             self.service.convert_image(self.doc.original, path, fmt, quality)
+            
+            converted_image = self.service.load_image(path)
+            self.doc.result = converted_image
+            self.view.show_preview(self.doc.original, self.doc.result)
+            
         except Exception as exc:
             messagebox.showerror("Erro", str(exc))
             return
+            
         self.view.set_status(f"Convertido: {Path(path).name}")
 
     def optimize_batch(self, resize_options: dict, quality: int, output_format: str, source_mode: str = "files"):

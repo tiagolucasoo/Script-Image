@@ -1,5 +1,4 @@
 customtkinter
 pillow
 numpy
-svglib
-reportlab
+PyMuPDF
