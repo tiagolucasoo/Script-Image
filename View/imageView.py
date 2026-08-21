@@ -53,6 +53,7 @@ class ScriptImageApp(ctk.CTk):
         self.btn_color = self._top_button(nav, "Substituir cor", lambda: self.switch_mode("color"))
         self.btn_convert = self._top_button(nav, "Converter", lambda: self.switch_mode("convert"))
         self.btn_optimize = self._top_button(nav, "Otimizar", lambda: self.switch_mode("optimize"))
+        self.btn_bg_remove = self._top_button(nav, "Remover Fundo", lambda: self.switch_mode("bg_remove"))
 
         self.config_bar = ctk.CTkFrame(self, fg_color=PANEL_ALT, border_width=1, border_color=BORDER, corner_radius=8)
         self.config_bar.grid(row=1, column=0, sticky="ew", padx=18, pady=(14, 10))
@@ -107,12 +108,15 @@ class ScriptImageApp(ctk.CTk):
         elif mode == "convert":
             self._show_preview_area()
             self._build_convert_bar()
-        else:
+        elif mode == "optimize":
             self._show_optimize_area()
             self._build_optimize_bar()
+        elif mode == "bg_remove":
+            self._show_bg_remove_area()
+            self._build_bg_remove_bar()
 
     def _style_nav(self):
-        mapping = {"color": self.btn_color, "convert": self.btn_convert, "optimize": self.btn_optimize}
+        mapping = {"color": self.btn_color, "convert": self.btn_convert, "optimize": self.btn_optimize, "bg_remove": self.btn_bg_remove}
         for mode, button in mapping.items():
             button.configure(fg_color=PRIMARY if mode == self.current_mode else "transparent")
 
@@ -804,8 +808,175 @@ class ScriptImageApp(ctk.CTk):
             if hasattr(self, "preview_result"):
                 self._segura_resultado = self.preview_result
                 
-            self.result_box.configure(image=None, text="Aguardando resultado")
+            self.result_box.configure(image=None, text='Aguardando resultado')
             self.result_box.image = None
 
     def set_status(self, text: str):
         self.status_label.configure(text=text)
+
+    def _show_bg_remove_area(self):
+        self.original_box.grid_remove()
+        self.result_box.grid_remove()
+        self.left_title.configure(text="Arquivos para Recorte")
+        self.right_title.configure(text="Instrucoes")
+
+        if not hasattr(self, "bg_remove_file_panel"):
+            self.bg_remove_file_panel = ctk.CTkScrollableFrame(self.preview, fg_color="#10141d", corner_radius=8)
+            self.bg_remove_result_panel = ctk.CTkFrame(self.preview, fg_color="#10141d", corner_radius=8)
+            self.bg_remove_result_panel.grid_columnconfigure(0, weight=1)
+            self.bg_remove_result_label = ctk.CTkLabel(
+                self.bg_remove_result_panel,
+                text="Carregue arquivos ou uma pasta para remover o fundo. Imagens serao salvas em WEBP transparente.",
+                text_color=MUTED,
+                font=("Segoe UI", 13),
+                wraplength=430,
+                justify="left",
+            )
+            self.bg_remove_result_label.grid(row=0, column=0, sticky="nw", padx=18, pady=18)
+            self.bg_remove_files = []
+            self.bg_remove_file_vars = []
+
+        if hasattr(self, "optimize_file_panel"):
+            self.optimize_file_panel.grid_remove()
+            self.optimize_result_panel.grid_remove()
+            
+        self.bg_remove_file_panel.grid(row=1, column=0, sticky="nsew", padx=(18, 8), pady=(0, 18))
+        self.bg_remove_result_panel.grid(row=1, column=1, sticky="nsew", padx=(8, 18), pady=(0, 18))
+
+    def _build_bg_remove_bar(self):
+        self.last_bg_output_dir = None
+        self.config_bar.grid_columnconfigure(0, weight=0)
+        self.config_bar.grid_columnconfigure(1, weight=1)
+
+        origin_card = ctk.CTkFrame(self.config_bar, fg_color="#151923", border_color=BORDER, border_width=1, corner_radius=8)
+        origin_card.grid(row=0, column=0, sticky="nsew", padx=(14, 8), pady=12)
+        settings_card = ctk.CTkFrame(self.config_bar, fg_color="#151923", border_color=BORDER, border_width=1, corner_radius=8)
+        settings_card.grid(row=0, column=1, sticky="nsew", padx=(8, 14), pady=12)
+
+        ctk.CTkLabel(origin_card, text="Origem", text_color=TEXT, font=("Segoe UI", 13, "bold")).grid(
+            row=0, column=0, columnspan=2, sticky="w", padx=12, pady=(10, 6)
+        )
+        ctk.CTkButton(
+            origin_card,
+            text="Arquivo",
+            width=96,
+            height=34,
+            fg_color=PRIMARY,
+            hover_color=PRIMARY_HOVER,
+            command=lambda: self.controller.select_bg_removal_sources("files"),
+        ).grid(row=1, column=0, padx=(12, 6), pady=(0, 8))
+        ctk.CTkButton(
+            origin_card,
+            text="Pasta",
+            width=88,
+            height=34,
+            fg_color=PRIMARY,
+            hover_color=PRIMARY_HOVER,
+            command=lambda: self.controller.select_bg_removal_sources("folder"),
+        ).grid(row=1, column=1, padx=(0, 12), pady=(0, 8))
+        
+        settings_card.grid_columnconfigure(1, weight=1)
+        self._label(settings_card, "Saida").grid(row=0, column=0, sticky="w", padx=(12, 6), pady=(24, 8))
+        self.bg_output_dir_label = ctk.CTkLabel(
+            settings_card,
+            text="Nao definida",
+            height=34,
+            fg_color="#111827",
+            corner_radius=6,
+            text_color=MUTED,
+            anchor="w",
+        )
+        self.bg_output_dir_label.grid(row=0, column=1, sticky="ew", padx=(0, 18), pady=(24, 8))
+        ctk.CTkButton(
+            settings_card,
+            text="Escolher Pasta",
+            width=120,
+            height=34,
+            fg_color="#334155",
+            hover_color="#475569",
+            command=self._choose_bg_output_dir,
+        ).grid(row=0, column=2, sticky="e", padx=(0, 12), pady=(24, 8))
+        
+        self.bg_remove_summary = ctk.CTkLabel(
+            self.config_bar,
+            text="Saida automatica: pasta 'recortadas' ao lado dos arquivos carregados.",
+            text_color=MUTED,
+            font=("Segoe UI", 11),
+            anchor="w",
+        )
+        self.bg_remove_summary.grid(row=1, column=0, columnspan=2, sticky="ew", padx=14, pady=(0, 10))
+
+    def _choose_bg_output_dir(self):
+        output_dir = filedialog.askdirectory(title="Escolha a pasta de saida")
+        if not output_dir:
+            return
+        self.last_bg_output_dir = output_dir
+        self.bg_output_dir_label.configure(text=output_dir, text_color=TEXT)
+
+    def set_bg_removal_files(self, files):
+        self._show_bg_remove_area()
+        self.bg_remove_files = [Path(path) for path in files]
+        self.bg_remove_file_vars = []
+
+        for widget in self.bg_remove_file_panel.winfo_children():
+            widget.destroy()
+
+        header = ctk.CTkFrame(self.bg_remove_file_panel, fg_color="transparent")
+        header.pack(fill="x", padx=8, pady=(8, 6))
+        ctk.CTkLabel(header, text=f"{len(self.bg_remove_files)} arquivo(s)", text_color=TEXT, font=("Segoe UI", 13, "bold")).pack(side="left")
+        
+        ctk.CTkButton(
+            header,
+            text="Remover Fundo",
+            width=140,
+            height=28,
+            fg_color=SUCCESS,
+            hover_color=SUCCESS_HOVER,
+            command=self._remove_bg_from_view,
+        ).pack(side="right", padx=(8, 0))
+        
+        ctk.CTkButton(header, text="Todos", width=66, height=28, command=lambda: self._set_all_bg_checks(True)).pack(side="right", padx=(6, 0))
+        ctk.CTkButton(header, text="Nenhum", width=76, height=28, fg_color="#334155", hover_color="#475569", command=lambda: self._set_all_bg_checks(False)).pack(side="right")
+
+        for path in self.bg_remove_files:
+            var = ctk.BooleanVar(value=True)
+            self.bg_remove_file_vars.append(var)
+            checkbox = ctk.CTkCheckBox(
+                self.bg_remove_file_panel,
+                text=path.name,
+                variable=var,
+                text_color="#dbe4f0",
+                fg_color=PRIMARY,
+                hover_color=PRIMARY_HOVER,
+            )
+            checkbox.pack(fill="x", padx=10, pady=4, anchor="w")
+
+        self.bg_remove_result_label.configure(text="Pronto para processar. Este processo utiliza IA e pode demorar alguns segundos por imagem.")
+
+    def _set_all_bg_checks(self, value: bool):
+        for var in getattr(self, "bg_remove_file_vars", []):
+            var.set(value)
+
+    def get_selected_bg_removal_files(self):
+        return [
+            path
+            for path, var in zip(getattr(self, "bg_remove_files", []), getattr(self, "bg_remove_file_vars", []))
+            if var.get()
+        ]
+
+    def set_default_bg_removal_output_dir(self, files):
+        if not files:
+            return
+        self.last_bg_output_dir = str(Path(files[0]).parent / "recortadas")
+        if hasattr(self, "bg_output_dir_label"):
+            self.bg_output_dir_label.configure(text=self.last_bg_output_dir, text_color=TEXT)
+
+    def _remove_bg_from_view(self):
+        selected = self.get_selected_bg_removal_files()
+        self.controller.remove_background_selected_files(selected, self.last_bg_output_dir)
+
+    def set_bg_removal_summary(self, text: str):
+        if hasattr(self, "bg_remove_summary"):
+            self.bg_remove_summary.configure(text=text)
+        if hasattr(self, "bg_remove_result_label"):
+            self.bg_remove_result_label.configure(text=text)

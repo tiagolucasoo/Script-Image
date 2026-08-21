@@ -181,6 +181,34 @@ class ImageService:
 
         return image
 
+    def remove_background(self, input_path: str | Path, output_dir: str | Path) -> Path:
+        import rembg
+        
+        input_path = Path(input_path)
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        image = self.load_image(input_path)
+        
+        # Reduzir a imagem antes de passar pela IA
+        max_dim = 800
+        if max(image.size) > max_dim:
+            image.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
+            
+        # O modelo u2net consome 1GB de RAM. Vamos forçar o modelo "u2netp" (Pocket)
+        # que é extremamente leve e incrivelmente mais rápido.
+        # Guardamos a sessão na classe para não ter que recarregar do zero a cada imagem!
+        if getattr(self, "_bg_session", None) is None:
+            self._bg_session = rembg.new_session("u2netp")
+            
+        result = rembg.remove(image, session=self._bg_session)
+        
+        # Salva o arquivo de saída como WEBP transparente
+        output_path = output_dir / f"{input_path.stem}.webp"
+        result.save(output_path, format="WEBP", quality=85, method=6)
+        
+        return output_path
+
     def _flatten_alpha(self, image: Image.Image, background: str) -> Image.Image:
         if image.mode not in ("RGBA", "LA"):
             return image.convert("RGB")

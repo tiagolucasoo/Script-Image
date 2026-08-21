@@ -212,6 +212,62 @@ class ImageController:
             size_text = f"0 B -> {self._format_bytes(after)}"
         return f"Otimizadas: {count} imagem(ns) | {size_text} | Saida: {output_dir}"
 
+    def select_bg_removal_sources(self, source_mode: str = "files"):
+        if source_mode == "folder":
+            input_dir = filedialog.askdirectory(title="Escolha a pasta com imagens")
+            if not input_dir:
+                return
+            files = self._image_files_from_folder(input_dir)
+            if not files:
+                messagebox.showwarning("Aviso", "Nenhuma imagem suportada foi encontrada na pasta.")
+                return
+        else:
+            files = filedialog.askopenfilenames(
+                filetypes=[
+                    ("Imagens", "*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.svg"),
+                    ("Todos os arquivos", "*.*"),
+                ]
+            )
+            if not files:
+                return
+
+        files = [Path(path) for path in files]
+        self.view.set_bg_removal_files(files)
+        self.view.set_default_bg_removal_output_dir(files)
+        self.view.set_status(f"{len(files)} imagem(ns) carregada(s) para remover fundo.")
+
+    def remove_background_selected_files(self, files, output_dir: str | Path):
+        if not files:
+            messagebox.showwarning("Aviso", "Marque pelo menos uma imagem para remover o fundo.")
+            return
+        if not output_dir:
+            messagebox.showwarning("Aviso", "Escolha uma pasta de saida antes de iniciar.")
+            return
+
+        created = []
+        errors = []
+
+        # Usar root do Tkinter para atualizar janela se estiver travando (isso idealmente seria async)
+        for i, file_path in enumerate(files):
+            try:
+                self.view.set_status(f"Processando {i+1}/{len(files)}: {Path(file_path).name} (isso pode demorar...)")
+                self.view.update_idletasks() # Força a tela a atualizar
+                
+                file_path = Path(file_path)
+                output_path = self.service.remove_background(file_path, output_dir)
+                created.append(output_path)
+            except Exception as exc:
+                errors.append(f"{Path(file_path).name}: {exc}")
+
+        if errors:
+            messagebox.showwarning("Concluido com avisos", "\n".join(errors[:6]))
+
+        summary = f"Fundo removido de {len(created)} imagem(ns) | Saida: {output_dir}"
+        self.view.set_status(summary)
+        self.view.set_bg_removal_summary(summary)
+        self.view.last_bg_output_dir = str(output_dir)
+        messagebox.showinfo("Sucesso", summary)
+
     def open_output_folder(self, output_dir: str | None):
         if output_dir:
             try:
